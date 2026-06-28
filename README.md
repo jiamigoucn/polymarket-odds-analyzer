@@ -41,7 +41,11 @@ python -m pip install -r requirements.txt
 
 ## Usage
 
-Run from the project root:
+Run from the project root.
+
+### Query Mode
+
+Use query mode for exploratory search across active markets:
 
 ```bash
 python -m src.main --query "France Sweden"
@@ -52,6 +56,24 @@ If your system uses `python3` instead of `python`:
 ```bash
 python3 -m src.main --query "France Sweden"
 ```
+
+Query mode scans active Gamma markets and applies local matching. It is useful for search, but it is not intended to guarantee complete coverage of a specific Polymarket event.
+
+### Event Slug Mode
+
+Use event-slug mode when you need complete market coverage for one known Polymarket event:
+
+```bash
+python -m src.main --event-slug world-cup-winner
+```
+
+If your system uses `python3` instead of `python`:
+
+```bash
+python3 -m src.main --event-slug world-cup-winner
+```
+
+Event-slug mode fetches the event through Gamma `/events?slug=...` and parses all nested markets under that event.
 
 The command writes a Markdown report under `reports/`, for example:
 
@@ -74,10 +96,11 @@ The report includes:
 
 ## How It Works
 
-1. Searches active, non-closed Polymarket markets through the Gamma API.
-2. Parses market title, slug, outcomes, CLOB token IDs, volume, and liquidity.
-3. Deduplicates all token IDs before querying prices.
-4. Calls the CLOB `/prices` endpoint in one batch with both BUY and SELL sides:
+1. In query mode, searches active, non-closed Polymarket markets through the Gamma API.
+2. In event-slug mode, fetches a specific Gamma event and parses all nested markets.
+3. Parses market title, slug, outcomes, CLOB token IDs, volume, and liquidity.
+4. Deduplicates all token IDs before querying prices.
+5. Calls the CLOB `/prices` endpoint in one batch with both BUY and SELL sides:
 
 ```json
 [
@@ -86,10 +109,10 @@ The report includes:
 ]
 ```
 
-5. Merges BUY and SELL prices for each token.
-6. Computes spread when both sides are available.
-7. Marks missing prices as `no liquidity` without stopping the program.
-8. Writes a Markdown matrix report.
+6. Merges BUY and SELL prices for each token.
+7. Computes spread when both sides are available.
+8. Marks missing prices as `no liquidity` without stopping the program.
+9. Writes a Markdown matrix report.
 
 ## Notes
 
