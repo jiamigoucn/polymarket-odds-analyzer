@@ -18,16 +18,20 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate a read-only Polymarket BUY/SELL odds matrix report.",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
         "--query",
-        required=True,
         help='Market search query, for example: "France Sweden"',
+    )
+    mode.add_argument(
+        "--event-slug",
+        help='Event slug for complete event market capture, for example: "world-cup-winner"',
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=500,
-        help="Maximum active Gamma markets to scan before local query matching.",
+        help="Maximum active Gamma markets to scan before local query matching. Ignored with --event-slug.",
     )
     parser.add_argument(
         "--reports-dir",
@@ -66,12 +70,18 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    LOGGER.info("Searching active Polymarket markets for query: %s", args.query)
     gamma_client = GammaClient(base_url=args.gamma_base_url, timeout=args.timeout)
     clob_client = ClobClient(base_url=args.clob_base_url, timeout=args.timeout)
 
     try:
-        markets = gamma_client.search_active_markets(query=args.query, limit=args.limit)
+        if args.event_slug:
+            LOGGER.info("Fetching complete Polymarket event markets for slug: %s", args.event_slug)
+            markets = gamma_client.get_event_markets(event_slug=args.event_slug)
+            report_label = args.event_slug
+        else:
+            LOGGER.info("Searching active Polymarket markets for query: %s", args.query)
+            markets = gamma_client.search_active_markets(query=args.query, limit=args.limit)
+            report_label = args.query
     except (GammaAPIError, ValueError) as exc:
         LOGGER.error("%s", exc)
         return 1
@@ -88,7 +98,7 @@ def main() -> int:
 
     rows = build_matrix(markets, prices)
     report_path = write_markdown_report(
-        query=args.query,
+        query=report_label,
         rows=rows,
         reports_dir=Path(args.reports_dir),
     )
