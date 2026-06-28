@@ -83,6 +83,49 @@ class GammaClient:
 
         return markets
 
+    def get_event_markets(self, event_slug: str) -> list[GammaMarket]:
+        """Fetch all markets nested under one active event slug."""
+
+        event_slug = event_slug.strip()
+        if not event_slug:
+            raise ValueError("event_slug must not be empty")
+
+        data = self._get_json(
+            "/events",
+            params={
+                "active": "true",
+                "closed": "false",
+                "slug": event_slug,
+            },
+        )
+        events = _extract_event_items(data)
+        event = _find_event_by_slug(events, event_slug)
+        if event is None:
+            LOGGER.warning("No active event found for slug: %s", event_slug)
+            return []
+
+        raw_markets = event.get("markets")
+        if not isinstance(raw_markets, list):
+            LOGGER.warning("Event %s did not include nested markets", event_slug)
+            return []
+
+        event_category = _first_text(event, "category", "categorySlug", "tag")
+        normalized_markets = []
+        for item in raw_markets:
+            if not isinstance(item, dict):
+                continue
+            item = {**item}
+            item.setdefault("eventSlug", event_slug)
+            if event_category:
+                item.setdefault("category", event_category)
+            normalized_markets.append(_parse_market(item))
+
+        markets = [market for market in normalized_markets if market.clob_token_ids]
+        if not markets:
+            LOGGER.warning("No markets with CLOB token IDs found for event slug: %s", event_slug)
+
+        return markets
+
     def _active_market_pages(self, limit: int) -> list[dict[str, Any]]:
         max_markets = max(1, limit)
         page_size = min(100, max_markets)
@@ -126,6 +169,28 @@ def _extract_market_items(data: Any) -> list[dict[str, Any]]:
             return [item for item in value if isinstance(item, dict)]
 
     return []
+
+
+def _extract_event_items(data: Any) -> list[dict[str, Any]]:
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+
+    if not isinstance(data, dict):
+        return []
+
+    for key in ("events", "data", "results"):
+        value = data.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+
+    return []
+
+
+def _find_event_by_slug(events: list[dict[str, Any]], slug: str) -> dict[str, Any] | None:
+    for event in events:
+        if _first_text(event, "slug") == slug:
+            return event
+    return events[0] if events else None
 
 
 def _parse_market(item: dict[str, Any]) -> GammaMarket:
